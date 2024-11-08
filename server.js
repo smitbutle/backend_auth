@@ -124,11 +124,19 @@ app.post('/submitattempt', (req, res) => {
 
     const results = embeddingsArray.map((embedding) => {
       try {
-        const score = calculateEuclideanDistance(referenceEmbedding, embedding);
+        let score = null;
+    
+        // Check if embedding is not null, then calculate the score
+        if (embedding !== null) {
+          score = calculateEuclideanDistance(referenceEmbedding, embedding);
+        }
+    
+        // Insert into database, with score being null if embedding is null
         db.run(
           `INSERT INTO attempts (test_id, embedding, score) VALUES (?, ?, ?)`,
           [test_id, JSON.stringify(embedding), score]
         );
+    
         return { embedding, score };
       } catch (error) {
         console.error("Error calculating distance:", error);
@@ -139,7 +147,6 @@ app.post('/submitattempt', (req, res) => {
     res.json({ success: true, results });
   });
 });
-
 
 
 app.post('/getreport', (req, res) => {
@@ -159,10 +166,22 @@ app.post('/getreport', (req, res) => {
         if (err) return res.status(500).json({ error: err.message });
         if (rows.length === 0) return res.status(404).json({ error: "No data found for this test." });
 
-        const scores = rows.map(row => row.score);
-        const averageScore = scores.reduce((a, b) => a + b, 0) / scores.length;
-        const medianScore = scores.sort((a, b) => a - b)[Math.floor(scores.length / 2)];
+        // Filter out null scores for calculations
+        const validScores = rows
+          .filter(row => row.score !== null)
+          .map(row => row.score);
+        
+        // Calculate average and median only for valid scores
+        const averageScore = validScores.length > 0 
+          ? validScores.reduce((a, b) => a + b, 0) / validScores.length 
+          : null;
+        
+        const sortedScores = validScores.sort((a, b) => a - b);
+        const medianScore = validScores.length > 0 
+          ? sortedScores[Math.floor(validScores.length / 2)] 
+          : null;
 
+        // Construct report
         const report = {
           username,
           test_id,
@@ -170,12 +189,12 @@ app.post('/getreport', (req, res) => {
           details: rows.map(row => ({
             score: row.score,
             timestamp: row.timestamp,
-            status: row.score < THRESHOLD ? "Pass" : "Fail" // Example threshold for pass/fail
+            status: row.score !== null ? (row.score < THRESHOLD ? "Pass" : "Fail") : "Not Attempted"
           })),
           summary: {
             average_score: averageScore,
             median_score: medianScore,
-            total_attempts: scores.length
+            total_attempts: rows.length
           }
         };
 
@@ -184,9 +203,6 @@ app.post('/getreport', (req, res) => {
     );
   });
 });
-
-
-
 
 // Define the threshold for verification
 // Adjust this value as needed
