@@ -6,10 +6,31 @@ const cors = require('cors');
 const port = 5000;
 const THRESHOLD = 0.35;
 
+const crypto = require('crypto');
+const AES = require('crypto-js/aes');
+const Utf8 = require('crypto-js/enc-utf8');
+
 
 // Middleware
 app.use(cors());
 app.use(bodyParser.json());
+
+// Function to generate a random encryption key
+function generateKey() {
+  return crypto.randomBytes(32).toString('hex'); // 256-bit key for AES encryption
+}
+
+// Helper function to encrypt data
+function encryptData(data, key) {
+  return AES.encrypt(JSON.stringify(data), key).toString();
+}
+
+// Helper function to decrypt data
+function decryptData(encryptedData, key) {
+  const bytes = AES.decrypt(encryptedData, key);
+  return JSON.parse(bytes.toString(Utf8));
+}
+
 
 // SQLite Database
 const db = new sqlite3.Database('./database.db', (err) => {
@@ -66,12 +87,15 @@ function calculateEuclideanDistance(embedding1, embedding2) {
 }
 
 
-
+// Registeration route with key generation
 app.post('/register', (req, res) => {
   const { username, embedding } = req.body;
+  const encryptionKey = generateKey();
+  const encryptedEmbedding = encryptData(embedding, encryptionKey);
+
   db.run(
-    `INSERT INTO users (username, embedding) VALUES (?, ?)`, 
-    [username, JSON.stringify(embedding)], 
+    `INSERT INTO users (username, embedding, encryption_key) VALUES (?, ?, ?)`, 
+    [username, encryptedEmbedding, encryptionKey], 
     (err) => {
       if (err) {
         if (err.errno === 19) { // UNIQUE constraint violation
@@ -81,7 +105,7 @@ app.post('/register', (req, res) => {
           res.status(500).send('Error saving user.');
         }
       } else {
-        res.status(200).send('User registered successfully.');
+        res.status(200).json({ message: 'User registered successfully.', encryptionKey });
       }
     }
   );
@@ -207,36 +231,69 @@ app.post('/getreport', (req, res) => {
 // Define the threshold for verification
 // Adjust this value as needed
 
+// Verification route with key generation
 // Verification route
 app.post('/verify', (req, res) => {
-  const { username, currentEmbedding } = req.body; // Removed threshold from request
+  const { username, currentEmbedding } = req.body;
   if (typeof currentEmbedding !== 'object' || currentEmbedding === null) {
     return res.status(400).send('Invalid current embedding.');
   }
 
-  db.get(`SELECT embedding FROM users WHERE username = ?`, [username], (err, row) => {
+  db.get(`SELECT embedding, encryption_key FROM users WHERE username = ?`, [username], (err, row) => {
     if (err) {
       console.error('Error fetching user:', err);
       res.status(500).send('Error fetching user.');
     } else if (row) {
+      const { embedding: encryptedEmbedding, encryption_key } = row;
       let savedEmbedding;
+
       try {
-        savedEmbedding = JSON.parse(row.embedding);
-        if (typeof savedEmbedding !== 'object' || savedEmbedding === null) {
-          throw new Error('Saved embedding is not an object.');
-        }
-      } catch (parseErr) {
-        console.error('Error parsing saved embedding:', parseErr);
+        savedEmbedding = decryptData(encryptedEmbedding, encryption_key);
+      } catch (error) {
+        console.error('Error decrypting saved embedding:', error);
         return res.status(500).send('Error processing user data.');
       }
 
-      const distance = euclideanDistance(currentEmbedding, savedEmbedding);
+      const distance = calculateEuclideanDistance(currentEmbedding, savedEmbedding);
       const isVerified = distance < THRESHOLD;
-
+    
       console.log('Username:', username);
       console.log('Distance:', distance);
       console.log('Is verified:', isVerified);
+    
       res.status(200).json({ isVerified });
+    } else {
+      res.status(404).send('User not found.');
+    }
+  });
+});
+
+// Key refresh route
+app.post('/refresh-key', (req, res) => {
+  const { username } = req.body;
+  
+  db.get(`SELECT embedding, encryption_key FROM users WHERE username = ?`, [username], (err, row) => {
+    if (err) {
+      console.error('Error fetching user for key refresh:', err);
+      res.status(500).send('Error fetching user.');
+    } else if (row) {
+      const { embedding: encryptedEmbedding } = row;
+      const newKey = generateKey();
+      const decryptedEmbedding = decryptData(encryptedEmbedding, row.encryption_key);
+      const reEncryptedEmbedding = encryptData(decryptedEmbedding, newKey);
+
+      db.run(
+        `UPDATE users SET embedding = ?, encryption_key = ? WHERE username = ?`,
+        [reEncryptedEmbedding, newKey, username],
+        (updateErr) => {
+          if (updateErr) {
+            console.error('Error updating encryption key:', updateErr);
+            res.status(500).send('Error updating encryption key.');
+          } else {
+            res.status(200).json({ message: 'Encryption key refreshed successfully.', newKey });
+          }
+        }
+      );
     } else {
       res.status(404).send('User not found.');
     }
