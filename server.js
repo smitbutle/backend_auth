@@ -31,18 +31,22 @@ function decryptData(encryptedData, key) {
   return JSON.parse(bytes.toString(Utf8));
 }
 
-
-// SQLite Database
+// SQLite database connection
 const db = new sqlite3.Database('./database.db', (err) => {
   if (err) {
     console.error(err.message);
   } else {
     console.log('Connected to the SQLite database.');
+    
+    // Update users table with new columns for key and key generation timestamp
     db.run(`CREATE TABLE IF NOT EXISTS users (
       user_id INTEGER PRIMARY KEY AUTOINCREMENT,
       username TEXT UNIQUE NOT NULL,
-      embedding TEXT
+      embedding TEXT,
+      encryption_key TEXT, -- Column to store the encryption key
+      key_generated_at DATETIME -- Column to store the timestamp when the key was generated
     )`);
+    
     db.run(`CREATE TABLE IF NOT EXISTS tests (
       test_id INTEGER PRIMARY KEY AUTOINCREMENT,
       user_id INTEGER,
@@ -50,6 +54,7 @@ const db = new sqlite3.Database('./database.db', (err) => {
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
       FOREIGN KEY (user_id) REFERENCES users(user_id)
     )`);
+    
     db.run(`CREATE TABLE IF NOT EXISTS attempts (
       attempt_id INTEGER PRIMARY KEY AUTOINCREMENT,
       test_id INTEGER,
@@ -60,6 +65,8 @@ const db = new sqlite3.Database('./database.db', (err) => {
     )`);
   }
 });
+
+
 function objectToArray(embeddingObject) {
   return Object.keys(embeddingObject)
     .sort((a, b) => parseInt(a) - parseInt(b)) // Ensure keys are in the correct order
@@ -105,6 +112,7 @@ app.post('/register', (req, res) => {
           res.status(500).send('Error saving user.');
         }
       } else {
+        console.log('User registered successfully:', username);
         res.status(200).json({ message: 'User registered successfully.', encryptionKey });
       }
     }
