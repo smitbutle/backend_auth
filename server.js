@@ -4,7 +4,7 @@ const sqlite3 = require('sqlite3').verbose();
 const app = express();
 const cors = require('cors');
 const port = 5000;
-const THRESHOLD = 0.35;
+const THRESHOLD = 0.4;
 
 
 // Middleware
@@ -19,8 +19,10 @@ const db = new sqlite3.Database('./database.db', (err) => {
     console.log('Connected to the SQLite database.');
     db.run(`CREATE TABLE IF NOT EXISTS users (
       user_id INTEGER PRIMARY KEY AUTOINCREMENT,
-      username TEXT UNIQUE NOT NULL,
-      embedding TEXT
+      username TEXT NOT NULL,
+      email TEXT NOT NULL,
+      embedding TEXT,
+      UNIQUE(username, email)
     )`);
     db.run(`CREATE TABLE IF NOT EXISTS tests (
       test_id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -68,19 +70,21 @@ function calculateEuclideanDistance(embedding1, embedding2) {
 
 
 app.post('/register', (req, res) => {
-  const { username, embedding } = req.body;
+  const { username, email, embedding, m1,m2,m3,m4,m5,w1,w2,w3 } = req.body;
   db.run(
-    `INSERT INTO users (username, embedding) VALUES (?, ?)`, 
-    [username, JSON.stringify(embedding)], 
+    `INSERT INTO users (username, email, embedding) VALUES (?, ?, ?)`, 
+    [username, email, JSON.stringify(embedding)], 
     (err) => {
       if (err) {
         if (err.errno === 19) { // UNIQUE constraint violation
+          console.log('Username already exists:', username);
           res.status(400).send('Username already exists.');
         } else {
           console.error('Error saving user:', err);
           res.status(500).send('Error saving user.');
         }
       } else {
+        console.log('User registered:', username);
         res.status(200).send('User registered successfully.');
       }
     }
@@ -109,7 +113,7 @@ app.post('/starttest', (req, res) => {
 });
 
 app.post('/submitattempt', (req, res) => {
-  const { username, test_id, embeddingsArray } = req.body;
+  const { username, test_id, embeddingsArray, timeStapArray } = req.body;
 
   db.get(`SELECT embedding FROM users WHERE username = ?`, [username], (err, row) => {
     if (err) return res.status(500).json({ error: err.message });
@@ -121,23 +125,27 @@ app.post('/submitattempt', (req, res) => {
     } catch (parseErr) {
       return res.status(500).json({ error: "Error parsing reference embedding." });
     }
-
+    let i =0;
     const results = embeddingsArray.map((embedding) => {
       try {
         let score = null;
-    
         // Check if embedding is not null, then calculate the score
         if (embedding !== null) {
-          score = calculateEuclideanDistance(referenceEmbedding, embedding);
+          if (embedding === "X") {
+            score = -1;
+          }
+          else score = calculateEuclideanDistance(referenceEmbedding, embedding);
         }
-    
+        
         // Insert into database, with score being null if embedding is null
+        let timestamp = timeStapArray[i];
         db.run(
-          `INSERT INTO attempts (test_id, embedding, score) VALUES (?, ?, ?)`,
-          [test_id, JSON.stringify(embedding), score]
+          `INSERT INTO attempts (test_id, embedding, score, timestamp) VALUES (?, ?, ?, ?)`,
+          [test_id, JSON.stringify(embedding), score, timestamp],
         );
-    
-        return { embedding, score };
+        
+        i++;
+        return { embedding, score , timestamp};
       } catch (error) {
         console.error("Error calculating distance:", error);
         return { embedding, error: error.message };
@@ -160,7 +168,8 @@ app.post('/getreport', (req, res) => {
       `SELECT a.score, a.timestamp, t.test_name 
        FROM attempts a 
        JOIN tests t ON a.test_id = t.test_id
-       WHERE t.test_id = ? AND t.user_id = ?`,
+       WHERE t.test_id = ? AND t.user_id = ?
+       ORDER BY a.timestamp`,
       [test_id, user.user_id],
       (err, rows) => {
         if (err) return res.status(500).json({ error: err.message });
@@ -168,7 +177,7 @@ app.post('/getreport', (req, res) => {
 
         // Filter out null scores for calculations
         const validScores = rows
-          .filter(row => row.score !== null)
+          .filter(row => row.score !== null && row.score !== -1)
           .map(row => row.score);
         
         // Calculate average and median only for valid scores
@@ -187,9 +196,9 @@ app.post('/getreport', (req, res) => {
           test_id,
           test_name: rows[0].test_name,
           details: rows.map(row => ({
-            score: row.score,
+            score: row.score === -1? null : row.score,
             timestamp: row.timestamp,
-            status: row.score !== null ? (row.score < THRESHOLD ? "Pass" : "Fail") : "Not Attempted"
+            status: row.score === -1 ? "Multiple face detected" : (row.score !== null ? (row.score < THRESHOLD ? "Pass" : "Fail") : "Not Attempted")
           })),
           summary: {
             average_score: averageScore,
