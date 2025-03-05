@@ -4,6 +4,7 @@ const register = require('./register');
 const startTest = require('./startTest');
 const submitAttempt = require('./submitAttempt');
 const verify = require('./verify')
+const getPubKey = require('./getPubKey')
 
 module.exports = {
     getAll,
@@ -11,5 +12,6 @@ module.exports = {
     register,
     startTest,
     submitAttempt,
-    getReport
+    getReport,
+    getPubKey
 };
