@@ -10,10 +10,13 @@
   "license": "ISC",
   "description": "",
   "dependencies": {
+    "base-64": "^1.0.0",
     "body-parser": "^1.20.3",
     "cors": "^2.8.5",
+    "eciesjs": "^0.4.14",
     "express": "^4.21.1",
     "face-api.js": "^0.22.2",
+    "node-rsa": "^1.1.1",
     "sqlite3": "^5.1.7"
   }
 }
