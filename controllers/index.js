@@ -13,5 +13,5 @@ module.exports = {
     startTest,
     submitAttempt,
     verify, 
-    getPubKey
+    getPubKey,
 };

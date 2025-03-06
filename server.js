@@ -24,22 +24,10 @@ app.post('/submitattempt', submitAttempt);
 app.post('/getreport', getReport);
 app.post('/verify', verify);
 
-// Get all data from the database for testing purposes
-app.get('/api/data', getAll);
-
-// Get public key for encryption
-app.get('/getpubkey', (req, res) => {
-  try {
-    const publicKeyPath = path.join(__dirname, './public_key.txt');
-    const publicKey = fs.readFileSync(publicKeyPath, 'utf8').trim();
-    
-    res.status(200).json({ publicKey });
-  } catch (error) {
-    console.error("Error fetching public key:", error);
-    res.status(500).send("Error retrieving public key.");
-  }
-});
-
+// Get 
+// app.get('/api/data', getAll);
+app.get('/getpubkey', getPubKey);
+app.get('/', (req,res) => {res.send('server is running')})
 
 // Start Server
 app.listen(PORT, () => {
