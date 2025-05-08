@@ -1,4 +1,4 @@
-const THRESHOLD = 0.4;
+const THRESHOLD = 0.8;
 const db = require('../db/dbInstance');
 
 
@@ -43,7 +43,7 @@ const db = require('../db/dbInstance');
             details: rows.map(row => ({
               score: row.score === -1? null : row.score,
               timestamp: row.timestamp,
-              status: row.score === -1 ? "Multiple face detected" : (row.score !== null ? (row.score < THRESHOLD ? "Pass" : "Fail") : "Not Attempted")
+              status: row.score === -1 ? "Multiple face detected" : (row.score !== null ? (row.score > THRESHOLD ? "Pass" : "Fail") : "Not Attempted")
             })),
             summary: {
               average_score: averageScore,

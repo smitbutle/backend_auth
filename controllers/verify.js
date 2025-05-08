@@ -1,15 +1,8 @@
 const db = require('../db/dbInstance');
-const THRESHOLD = 0.4;
+const cosineSimilarity = require('../utils/similarity');
+const THRESHOLD = 0.8;
 
-// Function to calculate Euclidean distance between two objects
-function euclideanDistance(a, b) {
-  const aValues = Object.values(a);
-  const bValues = Object.values(b);
-  return Math.sqrt(aValues.reduce((acc, val, i) => acc + (val - bValues[i]) ** 2, 0));
-}
-
-
- function verify(req, res){
+function verify(req, res){
     const { username, currentEmbedding } = req.body; 
     if (typeof currentEmbedding !== 'object' || currentEmbedding === null) {
       return res.status(400).send('Invalid current embedding.');
@@ -31,8 +24,8 @@ function euclideanDistance(a, b) {
           return res.status(500).send('Error processing user data.');
         }
   
-        const distance = euclideanDistance(currentEmbedding, savedEmbedding);
-        const isVerified = distance < THRESHOLD;
+        const distance = cosineSimilarity(currentEmbedding, savedEmbedding);
+        const isVerified = distance > THRESHOLD;
   
         console.log('Username:', username);
         console.log('Distance:', distance);
