@@ -1,7 +1,7 @@
-const THRESHOLD = 0.8;
+const THRESHOLD = 0.95;
 const db = require('../db/dbInstance');
 
-
+``
  function getReport(req, res){
     const { username, test_id } = req.body;
   

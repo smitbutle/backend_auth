@@ -1,6 +1,6 @@
 const db = require('../db/dbInstance');
 const cosineSimilarity = require('../utils/similarity');
-const THRESHOLD = 0.8;
+const THRESHOLD = 0.95;
 
 function verify(req, res){
     const { username, currentEmbedding } = req.body; 
